@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuzzQuiz — TV</title>
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCX5er97g3SDNUYU_Cg5sQEheRd5wqqqVw",
+    authDomain: "buzzquiz-b721a.firebaseapp.com",
+    databaseURL: "https://buzzquiz-b721a-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "buzzquiz-b721a",
+    storageBucket: "buzzquiz-b721a.firebasestorage.app",
+    messagingSenderId: "88901394910",
+    appId: "1:88901394910:web:5faaa7994e80be6cc93d4f"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const ROOM = Math.random().toString(36).substring(2,6).toUpperCase();
+  const r = p => ref(db, `rooms/${ROOM}/${p}`);
+
+  set(ref(db,`rooms/${ROOM}`), { state:'waiting', question:'', buzz:null, scores:{} });
+
+  window.addEventListener('load', () => {
+    document.getElementById('room-code').textContent = ROOM;
+    const url = location.href.replace('tv.html','player.html') + `?room=${ROOM}`;
+    new QRCode(document.getElementById('qr'), { text:url, width:130, height:130, colorDark:'#3d2b1f', colorLight:'#fdf6e3' });
+    document.getElementById('join-url').textContent = url;
+  });
+
+  onValue(r('players'), snap => renderPlayers(snap.val() || {}));
+  onValue(r('scores'), snap => renderScores(snap.val() || {}));
+  onValue(r('question'), snap => {
+    document.getElementById('question-display').textContent = snap.val() || '…';
+  });
+  onValue(r('buzz'), snap => {
+    const buzz = snap.val();
+    if (buzz) showBuzz(buzz); else hideBuzz();
+  });
+
+  const COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#9b5de5'];
+
+  function renderPlayers(players) {
+    const list = document.getElementById('player-list');
+    const keys = Object.keys(players);
+    list.innerHTML = '';
+    if (!keys.length) { list.innerHTML = '<div class="empty-p">En attente…</div>'; return; }
+    keys.forEach((k,i) => {
+      const d = document.createElement('div');
+      d.className = 'player-tag';
+      d.style.background = COLORS[i%COLORS.length];
+      d.textContent = players[k].name;
+      list.appendChild(d);
+    });
+  }
+
+  function renderScores(scores) {
+    const el = document.getElementById('scoreboard');
+    el.innerHTML = '';
+    const medals = ['🥇','🥈','🥉'];
+    Object.entries(scores).sort((a,b)=>b[1]-a[1]).forEach(([name,pts],i) => {
+      const d = document.createElement('div');
+      d.className = 'score-row';
+      d.innerHTML = `<span>${medals[i]||'·'} ${name}</span><span class="pts">${pts} pt${pts>1?'s':''}</span>`;
+      el.appendChild(d);
+    });
+    if (!Object.keys(scores).length) el.innerHTML = '<div class="empty-p">Aucun point encore…</div>';
+  }
+
+  function showBuzz(buzz) {
+    const panel = document.getElementById('buzz-panel');
+    document.getElementById('buzz-who').textContent = buzz.name;
+    document.getElementById('buzz-answer').textContent = buzz.answer || '';
+
+    const hasAnswer = buzz.answer && buzz.answer.trim().length > 0;
+    document.getElementById('answer-waiting').style.display = hasAnswer ? 'none' : 'flex';
+    document.getElementById('answer-reveal').style.display = hasAnswer ? 'block' : 'none';
+    document.getElementById('judge-btns').style.display = hasAnswer ? 'flex' : 'none';
+
+    panel.classList.add('visible');
+  }
+
+  function hideBuzz() {
+    document.getElementById('buzz-panel').classList.remove('visible');
+  }
+
+  window.sendQuestion = () => {
+    const q = document.getElementById('question-input').value.trim();
+    if (!q) return;
+    set(r('question'), q);
+    set(r('state'), 'question');
+    remove(r('buzz'));
+    document.getElementById('question-input').value = '';
+  };
+
+  window.judgeCorrect = async () => {
+    const snap = await get(r('buzz'));
+    const buzz = snap.val();
+    if (!buzz) return;
+    const sRef = ref(db,`rooms/${ROOM}/scores/${buzz.name}`);
+    const s = await get(sRef);
+    await set(sRef, (s.val()||0)+1);
+    remove(r('buzz'));
+  };
+
+  window.judgeWrong = () => { remove(r('buzz')); };
+
+  window.resetRound = () => {
+    remove(r('buzz'));
+    set(r('question'),'');
+    document.getElementById('question-input').focus();
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('question-input').addEventListener('keydown', e => {
+      if (e.key==='Enter') window.sendQuestion();
+    });
+  });
+</script>
+
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family:'Nunito',sans-serif;
+  background:#fdf6e3;
+  color:#3d2b1f;
+  height:100vh;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:1fr 290px;
+  grid-template-rows:68px 1fr 76px;
+}
+
+/* Lignes de cahier */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    repeating-linear-gradient(0deg,transparent,transparent 31px,rgba(160,140,100,0.18) 32px);
+  pointer-events:none; z-index:0;
+}
+/* Marge rouge */
+body::after {
+  content:'';
+  position:fixed; left:52px; top:0; bottom:0; width:2px;
+  background:rgba(230,80,80,0.22);
+  pointer-events:none; z-index:0;
+}
+
+/* ── HEADER ── */
+header {
+  grid-column:1/-1;
+  display:flex; align-items:center; padding:0 28px; gap:16px;
+  border-bottom:3px solid #e0d0a8;
+  background:#fdf6e3; position:relative; z-index:2;
+}
+
+.logo {
+  font-family:'Gaegu',cursive; font-size:2rem; font-weight:700;
+  color:#e63946; transform:rotate(-1.5deg); display:inline-block;
+  text-shadow:2px 2px 0 rgba(230,57,70,0.18);
+}
+.logo span { color:#118ab2; }
+
+.room-badge { margin-left:auto; text-align:right; }
+.room-label { font-size:.6rem; color:#a89880; letter-spacing:2px; text-transform:uppercase; }
+.room-code  { font-family:'Gaegu',cursive; font-size:2rem; font-weight:700; color:#118ab2; letter-spacing:6px; }
+
+/* ── MAIN ── */
+main {
+  padding:24px 32px; display:flex; flex-direction:column; gap:18px;
+  position:relative; z-index:1; overflow:hidden;
+}
+
+.question-board {
+  background:white; border-radius:14px;
+  border:3px solid #e0d0a8;
+  padding:20px 26px; position:relative;
+  box-shadow:5px 5px 0 #e0d0a8; min-height:100px;
+}
+.question-board::before { content:'📋'; position:absolute; top:-18px; left:18px; font-size:1.8rem; }
+.q-label { font-size:.6rem; color:#a89880; letter-spacing:2px; text-transform:uppercase; font-weight:700; margin-bottom:6px; }
+#question-display { font-family:'Gaegu',cursive; font-size:2.1rem; color:#3d2b1f; line-height:1.2; min-height:44px; }
+
+.scores-section { flex:1; overflow:hidden; }
+.section-label { font-size:.6rem; color:#a89880; letter-spacing:2px; text-transform:uppercase; font-weight:700; margin-bottom:8px; }
+#scoreboard { display:flex; flex-direction:column; gap:6px; }
+.score-row {
+  display:flex; justify-content:space-between; align-items:center;
+  background:white; border:2px solid #e0d0a8; border-radius:10px;
+  padding:9px 16px; font-weight:700; font-size:.95rem;
+  box-shadow:3px 3px 0 #e0d0a8;
+}
+.pts { font-family:'Gaegu',cursive; font-size:1.2rem; color:#e63946; }
+.empty-p { font-size:.75rem; color:#c4b49a; font-style:italic; }
+
+/* ── SIDEBAR ── */
+aside {
+  border-left:3px solid #e0d0a8;
+  padding:20px 18px;
+  display:flex; flex-direction:column; gap:18px;
+  position:relative; z-index:1;
+  background:rgba(253,246,227,.85);
+  grid-row:2;
+}
+
+.qr-block {
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  background:white; border:2px solid #e0d0a8; border-radius:12px;
+  padding:14px; box-shadow:3px 3px 0 #e0d0a8;
+}
+.scan-label { font-family:'Gaegu',cursive; font-size:1rem; color:#a89880; text-align:center; }
+#join-url { font-size:.48rem; color:#c4b49a; text-align:center; word-break:break-all; }
+#player-list { display:flex; flex-wrap:wrap; gap:6px; }
+.player-tag {
+  border-radius:20px; padding:5px 13px;
+  font-size:.85rem; font-weight:700;
+  color:white; text-shadow:1px 1px 0 rgba(0,0,0,.2);
+  animation:popIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes popIn { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
+
+/* ── FOOTER ── */
+footer {
+  grid-column:1/-1;
+  border-top:3px solid #e0d0a8;
+  padding:0 24px;
+  display:flex; align-items:center; gap:10px;
+  background:#fdf6e3; position:relative; z-index:2;
+}
+#question-input {
+  flex:1; font-family:'Gaegu',cursive; font-size:1.3rem;
+  background:white; border:2px solid #e0d0a8; border-radius:10px;
+  padding:10px 16px; color:#3d2b1f; outline:none;
+  box-shadow:3px 3px 0 #e0d0a8; transition:border-color .2s;
+}
+#question-input:focus { border-color:#118ab2; }
+#question-input::placeholder { color:#c4b49a; }
+
+.btn-send {
+  font-family:'Gaegu',cursive; font-size:1.05rem; font-weight:700;
+  background:#e63946; color:white; border:none; border-radius:10px;
+  padding:10px 22px; cursor:pointer;
+  box-shadow:3px 3px 0 #9b1d24; transition:transform .1s,box-shadow .1s; white-space:nowrap;
+}
+.btn-send:hover { transform:translate(-1px,-1px); box-shadow:4px 4px 0 #9b1d24; }
+.btn-send:active { transform:translate(2px,2px); box-shadow:1px 1px 0 #9b1d24; }
+
+.btn-reset {
+  font-family:'Gaegu',cursive; font-size:1rem;
+  background:#c4b49a; color:white; border:none; border-radius:10px;
+  padding:10px 16px; cursor:pointer;
+  box-shadow:3px 3px 0 #8a7a60; transition:transform .1s,box-shadow .1s; white-space:nowrap;
+}
+.btn-reset:hover { transform:translate(-1px,-1px); box-shadow:4px 4px 0 #8a7a60; }
+.btn-reset:active { transform:translate(2px,2px); box-shadow:1px 1px 0 #8a7a60; }
+
+/* ── BUZZ PANEL ── */
+#buzz-panel {
+  position:fixed; inset:0;
+  background:rgba(61,43,31,.55);
+  display:flex; align-items:center; justify-content:center;
+  z-index:100; opacity:0; pointer-events:none;
+  transition:opacity .3s; backdrop-filter:blur(6px);
+}
+#buzz-panel.visible { opacity:1; pointer-events:all; }
+
+.buzz-card {
+  background:#fdf6e3;
+  border:4px solid #3d2b1f; border-radius:20px;
+  padding:36px 44px; text-align:center;
+  box-shadow:10px 10px 0 #3d2b1f, 0 0 0 8px rgba(255,255,255,.4);
+  max-width:500px; width:90vw;
+  animation:cardPop .4s cubic-bezier(.34,1.56,.64,1);
+  position:relative;
+}
+@keyframes cardPop { from{transform:scale(.7) rotate(-3deg);opacity:0} to{transform:scale(1) rotate(0);opacity:1} }
+
+/* Coins décoratifs façon Pictionary */
+.buzz-card::before,.buzz-card::after {
+  content:'';
+  position:absolute; width:18px; height:18px;
+  border:3px solid #3d2b1f; border-radius:50%;
+}
+.buzz-card::before { top:12px; left:12px; }
+.buzz-card::after  { bottom:12px; right:12px; }
+
+.buzz-emoji { font-size:2.8rem; margin-bottom:6px; }
+.buzz-title { font-size:.65rem; color:#a89880; letter-spacing:3px; text-transform:uppercase; margin-bottom:2px; }
+#buzz-who { font-family:'Gaegu',cursive; font-size:3rem; font-weight:700; color:#e63946; line-height:1; margin-bottom:22px; }
+
+.answer-box {
+  background:white; border:2px dashed #e0d0a8; border-radius:12px;
+  padding:16px 20px; margin-bottom:22px; min-height:64px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+}
+.answer-label { font-size:.6rem; color:#a89880; letter-spacing:2px; text-transform:uppercase; font-weight:700; }
+#buzz-answer { font-family:'Gaegu',cursive; font-size:1.8rem; color:#3d2b1f; margin-top:4px; }
+#answer-waiting { display:flex; align-items:center; gap:8px; }
+.dot-pulse { display:flex; gap:5px; }
+.dot-pulse span {
+  width:8px; height:8px; border-radius:50%; background:#c4b49a;
+  animation:dotBounce 1.2s infinite;
+}
+.dot-pulse span:nth-child(2) { animation-delay:.2s; }
+.dot-pulse span:nth-child(3) { animation-delay:.4s; }
+@keyframes dotBounce { 0%,80%,100%{transform:scale(0.8);opacity:.4} 40%{transform:scale(1.2);opacity:1} }
+
+#judge-btns { display:flex; gap:14px; justify-content:center; }
+.judge-btn {
+  font-family:'Gaegu',cursive; font-size:1.2rem; font-weight:700;
+  border:none; border-radius:12px; padding:13px 28px; cursor:pointer;
+  transition:transform .1s,box-shadow .1s;
+}
+.btn-correct { background:#06d6a0; color:white; box-shadow:4px 4px 0 #048a66; }
+.btn-correct:hover { transform:translate(-2px,-2px); box-shadow:6px 6px 0 #048a66; }
+.btn-correct:active { transform:translate(2px,2px); box-shadow:2px 2px 0 #048a66; }
+.btn-wrong { background:#e63946; color:white; box-shadow:4px 4px 0 #9b1d24; }
+.btn-wrong:hover { transform:translate(-2px,-2px); box-shadow:6px 6px 0 #9b1d24; }
+.btn-wrong:active { transform:translate(2px,2px); box-shadow:2px 2px 0 #9b1d24; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">✏️ Buzz<span>Quiz</span></div>
+  <div class="room-badge">
+    <div class="room-label">Code de la room</div>
+    <div class="room-code" id="room-code">????</div>
+  </div>
+</header>
+
+<main>
+  <div class="question-board">
+    <div class="q-label">Question en cours</div>
+    <div id="question-display">…</div>
+  </div>
+
+  <div class="scores-section">
+    <div class="section-label">🏆 Scores</div>
+    <div id="scoreboard"><div class="empty-p">Aucun point encore…</div></div>
+  </div>
+</main>
+
+<aside>
+  <div class="qr-block">
+    <div class="scan-label">📱 Scanner pour jouer</div>
+    <div id="qr"></div>
+    <div id="join-url"></div>
+  </div>
+  <div>
+    <div class="section-label">👥 Joueurs</div>
+    <div id="player-list"><div class="empty-p">En attente…</div></div>
+  </div>
+</aside>
+
+<footer>
+  <input id="question-input" type="text" placeholder="✏️  Écris ta question ici…" />
+  <button class="btn-send" onclick="sendQuestion()">Envoyer !</button>
+  <button class="btn-reset" onclick="resetRound()">↺ Reset</button>
+</footer>
+
+<!-- BUZZ OVERLAY -->
+<div id="buzz-panel">
+  <div class="buzz-card">
+    <div class="buzz-emoji">⚡</div>
+    <div class="buzz-title">Premier à buzzer !</div>
+    <div id="buzz-who">???</div>
+
+    <div class="answer-box">
+      <div class="answer-label">Sa réponse</div>
+      <div id="answer-waiting">
+        <div class="dot-pulse"><span></span><span></span><span></span></div>
+        <span style="font-size:.8rem;color:#a89880;margin-left:4px">En train d'écrire…</span>
+      </div>
+      <div id="answer-reveal" style="display:none">
+        <div id="buzz-answer">…</div>
+      </div>
+    </div>
+
+    <div id="judge-btns" style="display:none">
+      <button class="judge-btn btn-correct" onclick="judgeCorrect()">✅ Bonne réponse !</button>
+      <button class="judge-btn btn-wrong" onclick="judgeWrong()">❌ Faux !</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
