@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuzzQuiz — TV</title>
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCX5er97g3SDNUYU_Cg5sQEheRd5wqqqVw",
+    authDomain: "buzzquiz-b721a.firebaseapp.com",
+    databaseURL: "https://buzzquiz-b721a-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "buzzquiz-b721a",
+    storageBucket: "buzzquiz-b721a.firebasestorage.app",
+    messagingSenderId: "88901394910",
+    appId: "1:88901394910:web:5faaa7994e80be6cc93d4f"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // Récupère ou crée un code de room persistant
+  let ROOM = sessionStorage.getItem('buzzquiz-room');
+  if (!ROOM) {
+    ROOM = Math.random().toString(36).substring(2,6).toUpperCase();
+    sessionStorage.setItem('buzzquiz-room', ROOM);
+    set(ref(db,`rooms/${ROOM}`), { state:'waiting', question:'', buzz:null, scores:{} });
+  }
+
+  const r = p => ref(db, `rooms/${ROOM}/${p}`);
+  const COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#9b5de5'];
+
+  window.addEventListener('load', () => {
+    document.getElementById('room-code').textContent = ROOM;
+
+    // QR code pointe vers player.html
+    const base = location.href.replace('tv.html','player.html');
+    const playerUrl = `${base}?room=${ROOM}`;
+    new QRCode(document.getElementById('qr'), {
+      text: playerUrl,
+      width: 180, height: 180,
+      colorDark: '#3d2b1f', colorLight: '#fdf6e3'
+    });
+  });
+
+  // Question
+  onValue(r('question'), snap => {
+    const q = snap.val() || '';
+    const el = document.getElementById('question-display');
+    const placeholder = document.getElementById('question-placeholder');
+    if (q) {
+      el.textContent = q;
+      el.style.display = 'block';
+      placeholder.style.display = 'none';
+    } else {
+      el.style.display = 'none';
+      placeholder.style.display = 'flex';
+    }
+  });
+
+  // Joueurs
+  onValue(r('players'), snap => {
+    const players = snap.val() || {};
+    const list = document.getElementById('player-list');
+    const keys = Object.keys(players);
+    list.innerHTML = '';
+    keys.forEach((k,i) => {
+      const d = document.createElement('div');
+      d.className = 'player-chip';
+      d.style.background = COLORS[i % COLORS.length];
+      d.textContent = players[k].name;
+      list.appendChild(d);
+    });
+    document.getElementById('player-count').textContent = keys.length + ' joueur' + (keys.length > 1 ? 's' : '');
+  });
+
+  // Scores
+  onValue(r('scores'), snap => {
+    const scores = snap.val() || {};
+    const el = document.getElementById('scoreboard');
+    el.innerHTML = '';
+    const medals = ['🥇','🥈','🥉'];
+    const sorted = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+    sorted.forEach(([name,pts],i) => {
+      const d = document.createElement('div');
+      d.className = 'score-row';
+      d.innerHTML = `<span class="score-name">${medals[i]||'·'} ${name}</span><span class="score-pts">${pts}</span>`;
+      el.appendChild(d);
+    });
+    if (!sorted.length) el.innerHTML = '<div class="score-empty">— aucun point —</div>';
+  });
+
+  // Buzz
+  onValue(r('buzz'), snap => {
+    const buzz = snap.val();
+    const overlay = document.getElementById('buzz-overlay');
+    if (!buzz) { overlay.classList.remove('visible'); return; }
+
+    document.getElementById('buzz-name').textContent = buzz.name;
+    const hasAnswer = buzz.answer && buzz.answer.trim();
+    document.getElementById('buzz-waiting').style.display = hasAnswer ? 'none' : 'flex';
+    document.getElementById('buzz-answer-block').style.display = hasAnswer ? 'block' : 'none';
+    document.getElementById('buzz-answer-text').textContent = buzz.answer || '';
+    document.getElementById('buzz-judge').style.display = hasAnswer ? 'flex' : 'none';
+    overlay.classList.add('visible');
+  });
+
+  // Verdict depuis la télé (boutons sur l'overlay)
+  window.judgeCorrect = async () => {
+    const snap = await get(r('buzz'));
+    const buzz = snap.val();
+    if (!buzz) return;
+    const sRef = ref(db, `rooms/${ROOM}/scores/${buzz.name}`);
+    const s = await get(sRef);
+    await set(sRef, (s.val()||0)+1);
+    remove(r('buzz'));
+  };
+  window.judgeWrong = () => remove(r('buzz'));
+</script>
+
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: #fdf6e3;
+  color: #3d2b1f;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  grid-template-rows: 100px 1fr;
+}
+
+/* Lignes de cahier */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image: repeating-linear-gradient(0deg, transparent, transparent 47px, rgba(160,140,100,0.18) 48px);
+  pointer-events:none; z-index:0;
+}
+body::after {
+  content:'';
+  position:fixed; left:72px; top:0; bottom:0; width:2px;
+  background: rgba(230,80,80,0.2);
+  pointer-events:none; z-index:0;
+}
+
+/* ── HEADER ── */
+header {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; padding: 0 48px; gap: 24px;
+  border-bottom: 3px solid #e0d0a8;
+  background: #fdf6e3; position:relative; z-index:2;
+}
+
+.logo {
+  font-family: 'Gaegu', cursive;
+  font-size: 3.2rem; font-weight: 700;
+  color: #e63946; transform: rotate(-1.5deg); display:inline-block;
+  text-shadow: 3px 3px 0 rgba(230,57,70,0.2);
+}
+.logo span { color: #118ab2; }
+
+.header-right { margin-left:auto; display:flex; align-items:center; gap:32px; }
+
+.room-badge { text-align:right; }
+.room-label { font-size:.7rem; color:#a89880; letter-spacing:3px; text-transform:uppercase; }
+.room-code  { font-family:'Gaegu',cursive; font-size:3rem; font-weight:700; color:#118ab2; letter-spacing:8px; line-height:1; }
+
+.player-count-badge {
+  background: #06d6a0; color:white;
+  font-family:'Gaegu',cursive; font-size:1.1rem; font-weight:700;
+  padding:6px 16px; border-radius:20px;
+  box-shadow: 3px 3px 0 #048a66;
+}
+
+/* ── MAIN CONTENT ── */
+main {
+  padding: 36px 48px;
+  display: flex; flex-direction:column; gap:24px;
+  position:relative; z-index:1;
+  overflow:hidden;
+}
+
+/* Question */
+.question-zone {
+  flex: 1;
+  display:flex; flex-direction:column; gap:12px;
+}
+
+.zone-label {
+  font-size:.75rem; color:#a89880; letter-spacing:3px;
+  text-transform:uppercase; font-weight:700;
+}
+
+.question-board {
+  background:white; border-radius:20px;
+  border:3px solid #e0d0a8;
+  padding:32px 40px;
+  box-shadow: 6px 6px 0 #e0d0a8;
+  flex:1; display:flex; align-items:center;
+  position:relative; min-height:160px;
+}
+.question-board::before {
+  content:'📋'; position:absolute; top:-22px; left:28px; font-size:2.2rem;
+}
+
+#question-display {
+  font-family:'Gaegu',cursive;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  color:#3d2b1f; line-height:1.2;
+  display:none;
+}
+
+#question-placeholder {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  width:100%; gap:12px; opacity:.4;
+}
+.ph-icon { font-size:3rem; }
+.ph-text { font-family:'Gaegu',cursive; font-size:1.4rem; color:#a89880; }
+
+/* Joueurs */
+.players-zone { }
+#player-list { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+.player-chip {
+  font-family:'Gaegu',cursive; font-size:1.2rem; font-weight:700;
+  color:white; border-radius:24px; padding:6px 18px;
+  text-shadow:1px 1px 0 rgba(0,0,0,0.2);
+  animation:popIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes popIn { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
+
+/* ── SIDEBAR ── */
+aside {
+  border-left:3px solid #e0d0a8;
+  padding:28px 24px;
+  display:flex; flex-direction:column; gap:24px;
+  position:relative; z-index:1;
+  background:rgba(253,246,227,.9);
+  overflow:hidden;
+}
+
+/* QR */
+.qr-block {
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  background:white; border:3px solid #e0d0a8; border-radius:16px;
+  padding:18px; box-shadow:4px 4px 0 #e0d0a8;
+}
+.qr-label { font-family:'Gaegu',cursive; font-size:1.1rem; color:#a89880; text-align:center; }
+.qr-sub   { font-size:.65rem; color:#c4b49a; text-align:center; }
+
+/* Scoreboard */
+.scores-block { flex:1; }
+#scoreboard { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.score-row {
+  display:flex; justify-content:space-between; align-items:center;
+  background:white; border:2px solid #e0d0a8; border-radius:10px;
+  padding:10px 16px;
+  box-shadow:3px 3px 0 #e0d0a8;
+}
+.score-name { font-size:1.1rem; font-weight:700; }
+.score-pts  { font-family:'Gaegu',cursive; font-size:1.6rem; color:#e63946; font-weight:700; }
+.score-empty { font-size:.8rem; color:#c4b49a; font-style:italic; text-align:center; margin-top:8px; }
+
+/* ── BUZZ OVERLAY ── */
+#buzz-overlay {
+  position:fixed; inset:0;
+  background:rgba(61,43,31,.6);
+  display:flex; align-items:center; justify-content:center;
+  z-index:100;
+  opacity:0; pointer-events:none;
+  transition:opacity .3s;
+  backdrop-filter:blur(8px);
+}
+#buzz-overlay.visible { opacity:1; pointer-events:all; }
+
+.buzz-card {
+  background:#fdf6e3;
+  border:5px solid #3d2b1f; border-radius:28px;
+  padding:48px 64px; text-align:center;
+  box-shadow:12px 12px 0 #3d2b1f;
+  max-width:680px; width:90vw;
+  animation:cardPop .4s cubic-bezier(.34,1.56,.64,1);
+  position:relative;
+}
+@keyframes cardPop { from{transform:scale(.7) rotate(-3deg);opacity:0} to{transform:scale(1) rotate(0);opacity:1} }
+
+.buzz-card::before,.buzz-card::after {
+  content:''; position:absolute; width:22px; height:22px;
+  border:4px solid #e0d0a8; border-radius:50%;
+}
+.buzz-card::before { top:16px; left:16px; }
+.buzz-card::after  { bottom:16px; right:16px; }
+
+.buzz-flash { font-size:4rem; margin-bottom:8px; }
+.buzz-subtitle { font-size:.8rem; color:#a89880; letter-spacing:4px; text-transform:uppercase; margin-bottom:4px; }
+
+#buzz-name {
+  font-family:'Gaegu',cursive;
+  font-size:clamp(3rem,8vw,5.5rem);
+  font-weight:700; color:#e63946;
+  line-height:1; margin-bottom:28px;
+}
+
+.answer-box {
+  background:white; border:3px dashed #e0d0a8; border-radius:16px;
+  padding:20px 28px; margin-bottom:28px; min-height:80px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+}
+.answer-box-label { font-size:.7rem; color:#a89880; letter-spacing:2px; text-transform:uppercase; font-weight:700; }
+
+#buzz-answer-text {
+  font-family:'Gaegu',cursive;
+  font-size:clamp(1.8rem, 4vw, 2.8rem);
+  color:#3d2b1f;
+}
+
+#buzz-waiting {
+  display:flex; align-items:center; gap:12px; color:#a89880;
+  font-size:.9rem; letter-spacing:1px;
+}
+.dots { display:flex; gap:6px; }
+.dots span {
+  width:10px; height:10px; border-radius:50%; background:#c4b49a;
+  animation:dot 1.2s infinite;
+}
+.dots span:nth-child(2){animation-delay:.2s}
+.dots span:nth-child(3){animation-delay:.4s}
+@keyframes dot{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1.2);opacity:1}}
+
+#buzz-judge { display:flex; gap:20px; justify-content:center; }
+.judge-btn {
+  font-family:'Gaegu',cursive; font-size:1.4rem; font-weight:700;
+  border:none; border-radius:14px; padding:16px 36px; cursor:pointer;
+  transition:transform .1s,box-shadow .1s;
+}
+.btn-ok  { background:#06d6a0; color:white; box-shadow:5px 5px 0 #048a66; }
+.btn-ok:hover  { transform:translate(-2px,-2px); box-shadow:7px 7px 0 #048a66; }
+.btn-ok:active { transform:translate(3px,3px); box-shadow:2px 2px 0 #048a66; }
+.btn-ko  { background:#e63946; color:white; box-shadow:5px 5px 0 #9b1d24; }
+.btn-ko:hover  { transform:translate(-2px,-2px); box-shadow:7px 7px 0 #9b1d24; }
+.btn-ko:active { transform:translate(3px,3px); box-shadow:2px 2px 0 #9b1d24; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">✏️ Buzz<span>Quiz</span></div>
+  <div class="header-right">
+    <div class="player-count-badge" id="player-count">0 joueur</div>
+    <div class="room-badge">
+      <div class="room-label">Code</div>
+      <div class="room-code" id="room-code">????</div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="question-zone">
+    <div class="zone-label">📋 Question en cours</div>
+    <div class="question-board">
+      <div id="question-display"></div>
+      <div id="question-placeholder">
+        <div class="ph-icon">✏️</div>
+        <div class="ph-text">L'hôte n'a pas encore posé de question…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="players-zone">
+    <div class="zone-label">👥 Joueurs</div>
+    <div id="player-list"></div>
+  </div>
+</main>
+
+<aside>
+  <div class="qr-block">
+    <div class="qr-label">📱 Scanner pour jouer</div>
+    <div id="qr"></div>
+    <div class="qr-sub">ou entre le code sur player.html</div>
+  </div>
+
+  <div class="scores-block">
+    <div class="zone-label">🏆 Scores</div>
+    <div id="scoreboard"><div class="score-empty">— aucun point —</div></div>
+  </div>
+</aside>
+
+<!-- BUZZ OVERLAY -->
+<div id="buzz-overlay">
+  <div class="buzz-card">
+    <div class="buzz-flash">⚡</div>
+    <div class="buzz-subtitle">Premier à buzzer !</div>
+    <div id="buzz-name">???</div>
+
+    <div class="answer-box">
+      <div class="answer-box-label">Sa réponse</div>
+      <div id="buzz-waiting">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <span>En train d'écrire…</span>
+      </div>
+      <div id="buzz-answer-block" style="display:none">
+        <div id="buzz-answer-text">…</div>
+      </div>
+    </div>
+
+    <div id="buzz-judge" style="display:none">
+      <button class="judge-btn btn-ok" onclick="judgeCorrect()">✅ Bonne réponse !</button>
+      <button class="judge-btn btn-ko" onclick="judgeWrong()">❌ Faux !</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
