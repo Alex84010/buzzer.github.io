@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>UNO — Neon Edition</title>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=Nunito:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, get, update, onValue, push, remove, off }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyA-LI-eVf069LVpkybZh1PBvDKgE_r-WKE",
+    authDomain: "bombgo-duo.firebaseapp.com",
+    databaseURL: "https://bombgo-duo-default-rtdb.firebaseio.com",
+    projectId: "bombgo-duo",
+    storageBucket: "bombgo-duo.firebasestorage.app",
+    messagingSenderId: "145372656449",
+    appId: "1:145372656449:web:8c2df41a5911d76757a7c0"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  window._db = db;
+  window._dbFns = { ref, set, get, update, onValue, push, remove, off };
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
+<style>
+  :root {
+    --red:    #ff3b5c;
+    --blue:   #3b8bff;
+    --green:  #2ddf7e;
+    --yellow: #ffd43b;
+    --wild:   #c084fc;
+    --bg:     #0d0f1a;
+    --surface:#161927;
+    --border: #ffffff18;
+    --text:   #f0f0ff;
+    --muted:  #7a7fa8;
+    --glow:   0 0 20px rgba(255,59,92,.5);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;overflow:hidden}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center}
+
+  /* ── SCREENS ── */
+  .screen{display:none;width:100%;max-width:480px;padding:24px;flex-direction:column;gap:16px;height:100%;overflow-y:auto}
+  .screen.active{display:flex}
+
+  /* ── LOGO ── */
+  .logo{font-family:'Boogaloo',cursive;font-size:72px;letter-spacing:2px;text-align:center;line-height:1;
+    background:linear-gradient(135deg,#ff3b5c,#ffd43b,#2ddf7e,#3b8bff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 0 20px rgba(255,59,92,.6));margin-bottom:4px}
+  .tagline{text-align:center;color:var(--muted);font-size:13px;letter-spacing:2px;text-transform:uppercase}
+
+  /* ── INPUTS ── */
+  input{background:var(--surface);border:1.5px solid var(--border);color:var(--text);border-radius:12px;padding:14px 18px;
+    font-size:16px;font-family:'Nunito',sans-serif;width:100%;outline:none;transition:.2s}
+  input:focus{border-color:rgba(255,59,92,.6);box-shadow:0 0 0 3px rgba(255,59,92,.12)}
+  input::placeholder{color:var(--muted)}
+
+  /* ── BUTTONS ── */
+  .btn{border:none;border-radius:14px;padding:15px 24px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:800;
+    cursor:pointer;transition:all .15s;width:100%;letter-spacing:.5px}
+  .btn-primary{background:linear-gradient(135deg,#ff3b5c,#ff6b35);color:#fff;box-shadow:0 4px 20px rgba(255,59,92,.4)}
+  .btn-primary:active{transform:scale(.97)}
+  .btn-secondary{background:var(--surface);color:var(--text);border:1.5px solid var(--border)}
+  .btn-secondary:active{transform:scale(.97)}
+  .btn-green{background:linear-gradient(135deg,#2ddf7e,#00c9a7);color:#000;box-shadow:0 4px 20px rgba(45,223,126,.35)}
+  .btn-sm{padding:10px 16px;font-size:14px;border-radius:10px;width:auto}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+  /* ── DIVIDER ── */
+  .divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+  /* ── LOBBY ── */
+  .room-code-display{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:20px;text-align:center}
+  .room-code-display .code{font-family:'Boogaloo',cursive;font-size:52px;letter-spacing:8px;
+    background:linear-gradient(135deg,#ffd43b,#ff6b35);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .room-code-display .sub{color:var(--muted);font-size:12px;margin-top:4px}
+
+  .players-list{display:flex;flex-direction:column;gap:8px}
+  .player-item{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:12px 16px;
+    display:flex;align-items:center;gap:12px;font-weight:700}
+  .player-item .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .player-item.host::after{content:'👑';margin-left:auto;font-size:16px}
+  .player-item.me{border-color:rgba(255,59,92,.5)}
+
+  .section-title{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+
+  /* ── GAME SCREEN ── */
+  #screen-game{padding:0;gap:0;background:var(--bg)}
+  .game-wrap{display:flex;flex-direction:column;height:100%;width:100%;max-width:480px}
+
+  /* Top bar */
+  .top-bar{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;
+    background:rgba(22,25,39,.95);border-bottom:1px solid var(--border);flex-shrink:0}
+  .current-player-badge{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px}
+  .turn-indicator{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .direction-badge{font-size:18px}
+
+  /* Opponents area */
+  .opponents{padding:8px 12px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;scrollbar-width:none}
+  .opponents::-webkit-scrollbar{display:none}
+  .opponent-chip{background:var(--surface);border:1.5px solid var(--border);border-radius:20px;
+    padding:6px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:13px;font-weight:700;transition:.2s}
+  .opponent-chip.active-turn{border-color:var(--yellow);box-shadow:0 0 12px rgba(255,212,59,.4)}
+  .opponent-chip .card-count{background:rgba(255,255,255,.1);border-radius:8px;padding:2px 8px;font-size:12px}
+
+  /* Center play area */
+  .play-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    background:radial-gradient(ellipse at center,#1a1d2e 0%,var(--bg) 70%);position:relative}
+  .pile-label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+
+  /* UNO Card */
+  .uno-card{width:72px;height:108px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;font-family:'Boogaloo',cursive;font-size:28px;font-weight:400;
+    border:3px solid rgba(255,255,255,.3);position:relative;overflow:hidden;cursor:pointer;
+    box-shadow:0 4px 20px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.2);transition:transform .15s,box-shadow .15s;
+    user-select:none;flex-shrink:0}
+  .uno-card::before{content:'';position:absolute;inset:5px;border-radius:8px;border:2px solid rgba(255,255,255,.2)}
+  .uno-card .corner{position:absolute;font-size:14px;line-height:1;font-family:'Boogaloo',cursive}
+  .uno-card .corner.tl{top:5px;left:7px}
+  .uno-card .corner.br{bottom:5px;right:7px;transform:rotate(180deg)}
+  .uno-card.red   {background:linear-gradient(135deg,#c0392b,#ff3b5c)}
+  .uno-card.blue  {background:linear-gradient(135deg,#1a6bb0,#3b8bff)}
+  .uno-card.green {background:linear-gradient(135deg,#1a8a4a,#2ddf7e)}
+  .uno-card.yellow{background:linear-gradient(135deg,#c47b00,#ffd43b);color:#000}
+  .uno-card.wild  {background:linear-gradient(135deg,#6b21a8,#c084fc)}
+  .uno-card.back  {background:linear-gradient(135deg,#1e1b4b,#312e81)}
+  .uno-card.back::after{content:'UNO';font-family:'Boogaloo',cursive;font-size:22px;color:rgba(255,255,255,.6);
+    border:2px solid rgba(255,255,255,.3);border-radius:6px;padding:2px 6px}
+  .uno-card:active:not(.disabled){transform:scale(.95)}
+  .uno-card.disabled{cursor:not-allowed;opacity:.6}
+
+  /* Top discard */
+  .top-card-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .top-card-wrap .uno-card{width:88px;height:132px;font-size:34px;border-radius:14px}
+  .top-card-wrap .uno-card .corner{font-size:17px}
+  .top-card-wrap .uno-card .corner.tl{top:7px;left:9px}
+  .top-card-wrap .uno-card .corner.br{bottom:7px;right:9px}
+
+  /* Draw pile */
+  .draw-pile-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .draw-pile-wrap .uno-card{width:88px;height:132px}
+  .draw-pile-wrap .uno-card:not(.disabled):hover{transform:translateY(-4px);box-shadow:0 8px 30px rgba(0,0,0,.6)}
+
+  .piles-row{display:flex;gap:24px;align-items:center}
+  .pile-divider{font-size:22px;color:var(--muted)}
+
+  /* My hand */
+  .my-hand-area{flex-shrink:0;background:rgba(22,25,39,.97);border-top:1px solid var(--border)}
+  .hand-header{padding:8px 16px 4px;display:flex;align-items:center;justify-content:space-between}
+  .hand-label{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);font-weight:700}
+  .my-hand{display:flex;gap:6px;padding:8px 12px 16px;overflow-x:auto;scrollbar-width:none;align-items:flex-end}
+  .my-hand::-webkit-scrollbar{display:none}
+  .my-hand .uno-card{flex-shrink:0;width:64px;height:96px;font-size:24px;border-radius:10px}
+  .my-hand .uno-card .corner{font-size:13px}
+  .my-hand .uno-card.playable:hover{transform:translateY(-8px);box-shadow:0 8px 20px rgba(0,0,0,.5)}
+  .my-hand .uno-card.playable{border-color:rgba(255,255,255,.6)}
+
+  /* UNO button */
+  .uno-btn{background:linear-gradient(135deg,#ff3b5c,#ff6b35);color:#fff;border:none;border-radius:12px;
+    padding:8px 20px;font-family:'Boogaloo',cursive;font-size:22px;cursor:pointer;
+    box-shadow:0 4px 16px rgba(255,59,92,.5);letter-spacing:1px;transition:.15s}
+  .uno-btn:active{transform:scale(.95)}
+
+  /* Color picker overlay */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;
+    z-index:100;backdrop-filter:blur(4px)}
+  .overlay.hidden{display:none}
+  .color-picker{background:var(--surface);border:1.5px solid var(--border);border-radius:20px;padding:24px;
+    display:flex;flex-direction:column;gap:16px;width:280px}
+  .color-picker h3{font-family:'Boogaloo',cursive;font-size:26px;text-align:center;letter-spacing:1px}
+  .color-options{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .color-opt{border:none;border-radius:14px;height:60px;font-family:'Boogaloo',cursive;font-size:22px;
+    cursor:pointer;transition:.15s;color:#fff;font-weight:400;letter-spacing:.5px}
+  .color-opt:active{transform:scale(.95)}
+  .color-opt.red   {background:linear-gradient(135deg,#c0392b,#ff3b5c)}
+  .color-opt.blue  {background:linear-gradient(135deg,#1a6bb0,#3b8bff)}
+  .color-opt.green {background:linear-gradient(135deg,#1a8a4a,#2ddf7e)}
+  .color-opt.yellow{background:linear-gradient(135deg,#c47b00,#ffd43b);color:#000}
+
+  /* Toast */
+  .toast-wrap{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:300px}
+  .toast{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px 16px;
+    font-size:14px;font-weight:700;text-align:center;animation:toastin .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+  .toast.info{border-color:rgba(59,139,255,.5);color:#3b8bff}
+  .toast.success{border-color:rgba(45,223,126,.5);color:#2ddf7e}
+  .toast.warning{border-color:rgba(255,212,59,.5);color:#ffd43b}
+  .toast.error{border-color:rgba(255,59,92,.5);color:#ff3b5c}
+  @keyframes toastin{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+
+  /* Win screen */
+  #screen-win{text-align:center;align-items:center;justify-content:center}
+  .trophy{font-size:80px;margin-bottom:8px;animation:bounce 1s infinite}
+  @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  .win-name{font-family:'Boogaloo',cursive;font-size:42px;
+    background:linear-gradient(135deg,#ffd43b,#ff6b35);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .win-sub{color:var(--muted);font-size:16px;margin-bottom:24px}
+
+  /* Info chips */
+  .info-chip{background:var(--surface);border:1.5px solid var(--border);border-radius:10px;
+    padding:6px 12px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .dot.red{background:var(--red)}
+  .dot.blue{background:var(--blue)}
+  .dot.green{background:var(--green)}
+  .dot.yellow{background:var(--yellow)}
+  .dot.wild{background:var(--wild)}
+
+  .error-msg{color:var(--red);font-size:13px;text-align:center;min-height:18px}
+
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:4px;height:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- ══════════ SCREEN: HOME ══════════ -->
+<div id="screen-home" class="screen active">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px">
+    <div>
+      <div class="logo">UNO</div>
+      <div class="tagline">✦ Neon Edition ✦</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <input id="pseudo-input" type="text" placeholder="Ton pseudo..." maxlength="16" autocomplete="off" style="text-align:center;font-size:18px;font-weight:800">
+      <div class="error-msg" id="home-error"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary" onclick="goCreate()">🎮 Créer une partie</button>
+      <div class="divider">ou</div>
+      <input id="code-input" type="text" placeholder="Code de partie (4 lettres)" maxlength="4"
+        style="text-align:center;letter-spacing:6px;font-size:22px;text-transform:uppercase;font-family:'Boogaloo',cursive">
+      <button class="btn btn-secondary" onclick="goJoin()">🔗 Rejoindre</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SCREEN: LOBBY ══════════ -->
+<div id="screen-lobby" class="screen">
+  <div style="display:flex;align-items:center;gap:12px">
+    <button class="btn btn-secondary btn-sm" onclick="leaveLobby()" style="width:auto">← Quitter</button>
+    <span class="section-title" style="flex:1;text-align:center">SALLE D'ATTENTE</span>
+    <div style="width:60px"></div>
+  </div>
+
+  <div class="room-code-display">
+    <div class="sub">CODE DE PARTIE</div>
+    <div class="code" id="lobby-code">----</div>
+    <div class="sub">Partage ce code à tes amis !</div>
+  </div>
+
+  <div>
+    <div class="section-title" style="margin-bottom:10px">JOUEURS (<span id="player-count">0</span>/8)</div>
+    <div class="players-list" id="players-list"></div>
+  </div>
+
+  <div style="margin-top:auto;display:flex;flex-direction:column;gap:10px">
+    <div id="waiting-msg" style="text-align:center;color:var(--muted);font-size:14px">En attente de joueurs... (min 2)</div>
+    <button class="btn btn-green" id="start-btn" onclick="startGame()" disabled>🚀 Lancer la partie</button>
+  </div>
+</div>
+
+<!-- ══════════ SCREEN: GAME ══════════ -->
+<div id="screen-game" class="screen">
+  <div class="game-wrap">
+    <!-- Top bar -->
+    <div class="top-bar">
+      <div class="current-player-badge">
+        <div class="turn-indicator" id="turn-dot"></div>
+        <span id="current-turn-name">—</span>
+      </div>
+      <div class="direction-badge" id="direction-badge">🔄</div>
+      <div class="info-chip">
+        <div class="dot" id="color-dot" style="background:var(--red)"></div>
+        <span id="current-color-label">Rouge</span>
+      </div>
+    </div>
+
+    <!-- Opponents -->
+    <div class="opponents" id="opponents-row"></div>
+
+    <!-- Play area -->
+    <div class="play-area">
+      <div class="piles-row">
+        <div class="draw-pile-wrap">
+          <div class="pile-label">PIOCHER</div>
+          <div class="uno-card back" id="draw-pile-card" onclick="drawCard()"></div>
+        </div>
+        <div class="pile-divider">⚡</div>
+        <div class="top-card-wrap">
+          <div class="pile-label">DÉFAUSSE</div>
+          <div class="uno-card" id="discard-card"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- My hand -->
+    <div class="my-hand-area">
+      <div class="hand-header">
+        <span class="hand-label">MA MAIN (<span id="my-card-count">0</span>)</span>
+        <button class="uno-btn" id="uno-btn" onclick="callUno()" style="display:none">UNO!</button>
+      </div>
+      <div class="my-hand" id="my-hand"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SCREEN: WIN ══════════ -->
+<div id="screen-win" class="screen">
+  <div class="trophy">🏆</div>
+  <div class="win-name" id="win-name">Joueur</div>
+  <div class="win-sub">a gagné la partie !</div>
+  <button class="btn btn-primary" onclick="backToHome()" style="width:200px">Rejouer</button>
+</div>
+
+<!-- Color picker overlay -->
+<div class="overlay hidden" id="color-overlay">
+  <div class="color-picker">
+    <h3>Choisis une couleur</h3>
+    <div class="color-options">
+      <button class="color-opt red"    onclick="pickColor('red')">🔴 Rouge</button>
+      <button class="color-opt blue"   onclick="pickColor('blue')">🔵 Bleu</button>
+      <button class="color-opt green"  onclick="pickColor('green')">🟢 Vert</button>
+      <button class="color-opt yellow" onclick="pickColor('yellow')">🟡 Jaune</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let db, dbFns;
+let myId = 'p_' + Math.random().toString(36).substr(2,9);
+let myPseudo = '';
+let roomCode = '';
+let isHost = false;
+let listeners = [];
+let pendingWildCard = null;
+let hasCalledUno = false;
+
+const COLORS = ['red','blue','green','yellow'];
+const COLOR_NAMES = {red:'Rouge',blue:'Bleu',green:'Vert',yellow:'Jaune',wild:'Joker'};
+const COLOR_CSS = {red:'var(--red)',blue:'var(--blue)',green:'var(--green)',yellow:'var(--yellow)',wild:'var(--wild)'};
+
+// ══════════════════════════════════════════
+// FIREBASE INIT
+// ══════════════════════════════════════════
+window.addEventListener('firebase-ready', () => {
+  db = window._db;
+  dbFns = window._dbFns;
+});
+
+// ══════════════════════════════════════════
+// DECK LOGIC
+// ══════════════════════════════════════════
+function buildDeck() {
+  const deck = [];
+  let id = 0;
+  COLORS.forEach(c => {
+    // 0 x1, 1-9 x2, skip x2, reverse x2, +2 x2
+    deck.push({id:id++,color:c,value:'0',display:'0'});
+    ['1','2','3','4','5','6','7','8','9','skip','reverse','+2'].forEach(v => {
+      const disp = v==='skip'?'⛔':v==='reverse'?'🔄':v;
+      deck.push({id:id++,color:c,value:v,display:disp});
+      deck.push({id:id++,color:c,value:v,display:disp});
+    });
+  });
+  // 4x wild, 4x wild+4
+  for(let i=0;i<4;i++){
+    deck.push({id:id++,color:'wild',value:'wild',display:'🌈'});
+    deck.push({id:id++,color:'wild',value:'+4',display:'+4'});
+  }
+  return shuffle(deck);
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+// ══════════════════════════════════════════
+// SCREENS
+// ══════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+id).classList.add('active');
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+function toast(msg, type='info', duration=2500) {
+  const wrap = document.getElementById('toast-wrap');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='.3s';setTimeout(()=>t.remove(),300)}, duration);
+}
+
+// ══════════════════════════════════════════
+// HOME ACTIONS
+// ══════════════════════════════════════════
+function validatePseudo() {
+  const v = document.getElementById('pseudo-input').value.trim();
+  if(!v){document.getElementById('home-error').textContent='Entre ton pseudo !';return null}
+  document.getElementById('home-error').textContent='';
+  return v;
+}
+
+async function goCreate() {
+  const pseudo = validatePseudo();
+  if(!pseudo) return;
+  if(!db){toast('Firebase non configuré','error');return}
+  myPseudo = pseudo;
+  isHost = true;
+  // Generate 4-letter code
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ';
+  roomCode = Array.from({length:4},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+  document.getElementById('lobby-code').textContent = roomCode;
+  const roomRef = dbFns.ref(db, `rooms/${roomCode}`);
+  await dbFns.set(roomRef, {
+    host: myId,
+    status: 'waiting',
+    players: { [myId]: {pseudo, ready:false} }
+  });
+  listenLobby();
+  showScreen('lobby');
+}
+
+async function goJoin() {
+  const pseudo = validatePseudo();
+  if(!pseudo) return;
+  if(!db){toast('Firebase non configuré','error');return}
+  const code = document.getElementById('code-input').value.trim().toUpperCase();
+  if(code.length!==4){document.getElementById('home-error').textContent='Code invalide (4 lettres)';return}
+  myPseudo = pseudo;
+  isHost = false;
+  roomCode = code;
+  const roomRef = dbFns.ref(db, `rooms/${roomCode}`);
+  const snap = await dbFns.get(roomRef);
+  if(!snap.exists()){document.getElementById('home-error').textContent='Salle introuvable';return}
+  const room = snap.val();
+  if(room.status !== 'waiting'){document.getElementById('home-error').textContent='Partie déjà en cours';return}
+  const playerCount = Object.keys(room.players||{}).length;
+  if(playerCount>=8){document.getElementById('home-error').textContent='Salle pleine (8/8)';return}
+  await dbFns.update(dbFns.ref(db,`rooms/${roomCode}/players`),{[myId]:{pseudo,ready:false}});
+  document.getElementById('lobby-code').textContent = roomCode;
+  listenLobby();
+  showScreen('lobby');
+}
+
+// ══════════════════════════════════════════
+// LOBBY
+// ══════════════════════════════════════════
+function listenLobby() {
+  clearListeners();
+  const roomRef = dbFns.ref(db, `rooms/${roomCode}`);
+  const unsub = dbFns.onValue(roomRef, snap => {
+    if(!snap.exists()) return;
+    const room = snap.val();
+
+    // If game started, enter game
+    if(room.status === 'playing' && document.getElementById('screen-lobby').classList.contains('active')) {
+      enterGame(room);
+      return;
+    }
+    if(room.status === 'finished') {
+      document.getElementById('win-name').textContent = room.winner || '?';
+      showScreen('win');
+      return;
+    }
+
+    const players = room.players || {};
+    const ids = Object.keys(players);
+    document.getElementById('player-count').textContent = ids.length;
+    const list = document.getElementById('players-list');
+    list.innerHTML = '';
+    ids.forEach(pid => {
+      const p = players[pid];
+      const div = document.createElement('div');
+      div.className = 'player-item' + (pid===room.host?' host':'') + (pid===myId?' me':'');
+      const colors = ['#ff3b5c','#3b8bff','#2ddf7e','#ffd43b','#c084fc','#fb923c','#34d399','#f472b6'];
+      const colorIdx = ids.indexOf(pid);
+      div.innerHTML = `<div class="avatar" style="background:${colors[colorIdx]}20;color:${colors[colorIdx]}">
+        ${p.pseudo.charAt(0).toUpperCase()}</div>
+        <span>${p.pseudo}${pid===myId?' (toi)':''}</span>`;
+      list.appendChild(div);
+    });
+
+    const startBtn = document.getElementById('start-btn');
+    const waitMsg = document.getElementById('waiting-msg');
+    if(isHost) {
+      startBtn.disabled = ids.length < 2;
+      waitMsg.textContent = ids.length < 2 ? 'En attente d\'au moins 1 autre joueur...' : `${ids.length} joueurs prêts — Lance la partie !`;
+    } else {
+      startBtn.disabled = true;
+      startBtn.textContent = 'En attente de l\'hôte...';
+      waitMsg.textContent = '';
+    }
+  });
+  listeners.push({ref: roomRef, unsub});
+}
+
+async function leaveLobby() {
+  clearListeners();
+  const pRef = dbFns.ref(db, `rooms/${roomCode}/players/${myId}`);
+  await dbFns.remove(pRef);
+  if(isHost) await dbFns.remove(dbFns.ref(db, `rooms/${roomCode}`));
+  showScreen('home');
+}
+
+async function startGame() {
+  if(!isHost) return;
+  const snap = await dbFns.get(dbFns.ref(db, `rooms/${roomCode}/players`));
+  if(!snap.exists()) return;
+  const players = snap.val();
+  const ids = Object.keys(players);
+  if(ids.length < 2) return;
+
+  // Build initial game state
+  const deck = buildDeck();
+  const hands = {};
+  ids.forEach(pid => { hands[pid] = []; });
+
+  // Deal 7 cards each
+  let di = 0;
+  for(let c=0;c<7;c++) ids.forEach(pid => { hands[pid].push(deck[di++]); });
+
+  // Find first non-wild card for discard
+  let topIdx = di++;
+  while(deck[topIdx].color === 'wild') topIdx = di++;
+  const topCard = deck[topIdx];
+  // Rest goes to draw pile
+  const remaining = deck.filter((_,i) => i !== topIdx && i >= di);
+
+  const pseudoMap = {};
+  ids.forEach(pid => { pseudoMap[pid] = players[pid].pseudo; });
+
+  const gameState = {
+    status: 'playing',
+    players: pseudoMap,
+    order: ids,
+    currentTurn: ids[0],
+    direction: 1, // 1 = clockwise, -1 = counterclockwise
+    currentColor: topCard.color,
+    discardTop: topCard,
+    drawPile: remaining,
+    hands,
+    scores: {},
+    unoCallers: {},
+    lastAction: 'Partie démarrée !'
+  };
+
+  await dbFns.update(dbFns.ref(db, `rooms/${roomCode}`), gameState);
+}
+
+// ══════════════════════════════════════════
+// GAME ENTER
+// ══════════════════════════════════════════
+function enterGame(room) {
+  clearListeners();
+  showScreen('game');
+  listenGame();
+}
+
+function listenGame() {
+  clearListeners();
+  const roomRef = dbFns.ref(db, `rooms/${roomCode}`);
+  const unsub = dbFns.onValue(roomRef, snap => {
+    if(!snap.exists()) return;
+    const room = snap.val();
+    if(room.status === 'finished') {
+      document.getElementById('win-name').textContent = room.winner || '?';
+      showScreen('win');
+      return;
+    }
+    renderGame(room);
+  });
+  listeners.push({ref: roomRef, unsub});
+}
+
+// ══════════════════════════════════════════
+// RENDER GAME
+// ══════════════════════════════════════════
+function renderGame(room) {
+  const {order, currentTurn, direction, currentColor, discardTop, hands, players} = room;
+
+  // Top bar
+  const turnName = players[currentTurn] || '?';
+  const isMyTurn = currentTurn === myId;
+  document.getElementById('current-turn-name').textContent = isMyTurn ? '👉 À TOI !' : `Tour de ${turnName}`;
+  document.getElementById('turn-dot').style.background = isMyTurn ? 'var(--green)' : 'var(--yellow)';
+  document.getElementById('direction-badge').textContent = direction === 1 ? '🔃' : '🔄';
+
+  // Color indicator
+  const colorDot = document.getElementById('color-dot');
+  colorDot.style.background = COLOR_CSS[currentColor] || 'var(--wild)';
+  document.getElementById('current-color-label').textContent = COLOR_NAMES[currentColor] || 'Joker';
+
+  // Discard top
+  renderCard(document.getElementById('discard-card'), discardTop, false, false);
+
+  // Draw pile
+  const drawEl = document.getElementById('draw-pile-card');
+  drawEl.className = 'uno-card back' + (isMyTurn ? '' : ' disabled');
+  drawEl.innerHTML = '';
+
+  // Opponents
+  const opRow = document.getElementById('opponents-row');
+  opRow.innerHTML = '';
+  order.forEach(pid => {
+    if(pid === myId) return;
+    const hand = hands[pid] || [];
+    const chip = document.createElement('div');
+    chip.className = 'opponent-chip' + (pid===currentTurn?' active-turn':'');
+    chip.innerHTML = `<span>${players[pid]}</span><span class="card-count">🃏 ${hand.length}</span>`;
+    opRow.appendChild(chip);
+  });
+
+  // My hand
+  const myHand = hands[myId] || [];
+  const handEl = document.getElementById('my-hand');
+  handEl.innerHTML = '';
+  document.getElementById('my-card-count').textContent = myHand.length;
+
+  myHand.forEach((card, idx) => {
+    const el = document.createElement('div');
+    const playable = isMyTurn && canPlay(card, discardTop, currentColor);
+    renderCard(el, card, playable && isMyTurn, !playable || !isMyTurn);
+    if(playable && isMyTurn) {
+      el.onclick = () => playCard(idx, card, room);
+    }
+    handEl.appendChild(el);
+  });
+
+  // UNO button
+  const unoBtn = document.getElementById('uno-btn');
+  unoBtn.style.display = (myHand.length === 2 && isMyTurn) ? 'block' : 'none';
+
+  // Toast last action
+  if(room.lastAction && room._lastActionTs && room._lastActionTs !== window._lastToastTs) {
+    window._lastToastTs = room._lastActionTs;
+    toast(room.lastAction, 'info', 2000);
+  }
+}
+
+function renderCard(el, card, playable, disabled) {
+  el.className = `uno-card ${card.color}` + (disabled ? ' disabled' : '') + (playable ? ' playable' : '');
+  el.innerHTML = `
+    <div class="corner tl">${card.display}</div>
+    <span>${card.display}</span>
+    <div class="corner br">${card.display}</div>`;
+}
+
+// ══════════════════════════════════════════
+// CAN PLAY
+// ══════════════════════════════════════════
+function canPlay(card, top, currentColor) {
+  if(card.color === 'wild') return true;
+  if(card.color === currentColor) return true;
+  if(card.value === top.value) return true;
+  return false;
+}
+
+// ══════════════════════════════════════════
+// PLAY CARD
+// ══════════════════════════════════════════
+async function playCard(idx, card, room) {
+  if(room.currentTurn !== myId) return;
+
+  if(card.color === 'wild' || card.value === '+4') {
+    pendingWildCard = {idx, card};
+    document.getElementById('color-overlay').classList.remove('hidden');
+    return;
+  }
+  await executePlay(idx, card, card.color, room);
+}
+
+async function pickColor(color) {
+  document.getElementById('color-overlay').classList.add('hidden');
+  if(!pendingWildCard) return;
+  const snap = await dbFns.get(dbFns.ref(db, `rooms/${roomCode}`));
+  const room = snap.val();
+  await executePlay(pendingWildCard.idx, pendingWildCard.card, color, room);
+  pendingWildCard = null;
+}
+
+async function executePlay(idx, card, chosenColor, room) {
+  let {order, currentTurn, direction, hands, drawPile, discardTop, players, unoCallers} = room;
+  const myHand = [...(hands[myId]||[])];
+  myHand.splice(idx, 1);
+
+  // Check UNO penalty: played down to 1 without calling UNO
+  if(myHand.length === 1 && !hasCalledUno) {
+    // Draw 2 penalty
+    for(let i=0;i<2;i++) {
+      if(drawPile.length === 0) drawPile = shuffle([...room.discardPile||[]]);
+      if(drawPile.length > 0) myHand.push(drawPile.shift());
+    }
+    toast('Tu n\'as pas crié UNO ! +2 cartes 😅','warning');
+  }
+  hasCalledUno = false;
+
+  // Win check
+  if(myHand.length === 0) {
+    await dbFns.update(dbFns.ref(db, `rooms/${roomCode}`), {
+      status: 'finished', winner: players[myId], lastAction: `🏆 ${players[myId]} a gagné !`
+    });
+    return;
+  }
+
+  // Advance turn
+  const currentIdx = order.indexOf(currentTurn);
+  let nextIdx;
+  let skip = false;
+  let drawAmount = 0;
+
+  if(card.value === 'skip') skip = true;
+  if(card.value === 'reverse') {
+    direction = -direction;
+    if(order.length === 2) skip = true; // 2 players: reverse = skip
+  }
+  if(card.value === '+2') drawAmount = 2;
+  if(card.value === '+4') drawAmount = 4;
+
+  let ni = (currentIdx + direction + order.length) % order.length;
+  if(skip) ni = (ni + direction + order.length) % order.length;
+
+  const nextPlayer = order[ni];
+
+  // Draw for next player
+  if(drawAmount > 0) {
+    const nextHand = [...(hands[nextPlayer]||[])];
+    for(let i=0;i<drawAmount;i++) {
+      if(drawPile.length === 0) { toast('La pioche est vide !','warning'); break; }
+      nextHand.push(drawPile.shift());
+    }
+    hands[nextPlayer] = nextHand;
+    // Also skip next
+    ni = (ni + direction + order.length) % order.length;
+  }
+
+  hands[myId] = myHand;
+
+  const actionMap = {
+    skip:`⛔ ${players[myId]} a passé le tour`,
+    reverse:`🔄 ${players[myId]} a inversé le sens`,
+    '+2':`+2 pour ${players[order[(currentIdx+direction+order.length)%order.length]]}`,
+    '+4':`+4 pour ${players[order[(currentIdx+direction+order.length)%order.length]]}`,
+    wild:`🌈 ${players[myId]} a choisi ${COLOR_NAMES[chosenColor]}`
+  };
+  const action = actionMap[card.value] || `${players[myId]} a joué`;
+
+  await dbFns.update(dbFns.ref(db, `rooms/${roomCode}`), {
+    hands,
+    drawPile,
+    discardTop: card,
+    currentColor: chosenColor,
+    currentTurn: order[ni],
+    direction,
+    lastAction: action,
+    _lastActionTs: Date.now()
+  });
+}
+
+// ══════════════════════════════════════════
+// DRAW CARD
+// ══════════════════════════════════════════
+async function drawCard() {
+  const snap = await dbFns.get(dbFns.ref(db, `rooms/${roomCode}`));
+  if(!snap.exists()) return;
+  const room = snap.val();
+  if(room.currentTurn !== myId) return;
+
+  let {order, currentTurn, direction, hands, drawPile, discardTop, currentColor, players} = room;
+  const myHand = [...(hands[myId]||[])];
+
+  if(drawPile.length === 0) { toast('La pioche est vide !','warning'); return; }
+  const drawn = drawPile.shift();
+  myHand.push(drawn);
+  hands[myId] = myHand;
+
+  // Check if drawn card is playable
+  if(canPlay(drawn, discardTop, currentColor)) {
+    toast(`Tu as pioché : ${drawn.display} (jouable !)`, 'success');
+  } else {
+    // Pass turn
+    const ci = order.indexOf(currentTurn);
+    const ni = (ci + direction + order.length) % order.length;
+    await dbFns.update(dbFns.ref(db, `rooms/${roomCode}`), {
+      hands, drawPile, currentTurn: order[ni],
+      lastAction: `${players[myId]} a pioché`, _lastActionTs: Date.now()
+    });
+    return;
+  }
+
+  await dbFns.update(dbFns.ref(db, `rooms/${roomCode}`), { hands, drawPile,
+    lastAction: `${players[myId]} a pioché`, _lastActionTs: Date.now() });
+}
+
+// ══════════════════════════════════════════
+// UNO CALL
+// ══════════════════════════════════════════
+function callUno() {
+  hasCalledUno = true;
+  toast('🟥 UNO !', 'warning', 2000);
+}
+
+// ══════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════
+function clearListeners() {
+  listeners.forEach(l => dbFns.off(l.ref));
+  listeners = [];
+}
+
+function backToHome() {
+  clearListeners();
+  showScreen('home');
+}
+</script>
+</body>
+</html>
